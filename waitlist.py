@@ -1,16 +1,19 @@
-import os
-import re
-from dotenv import load_dotenv
-from typing import Dict
-import requests
-from fastapi import FastAPI,APIRouter, HTTPException
-import resend
-from pydantic import BaseModel, EmailStr
 
-router = APIRouter()
+## Python file educational add to 
+##add to .ignore
 
-load_dotenv(override=True)
-resend.api_key = os.environ["RESEND_API_KEY"]
+# import os
+# import re
+# from dotenv import load_dotenv
+# from typing import Dict
+# import requests
+# from fastapi import FastAPI,APIRouter, HTTPException
+# import resend
+# from pydantic import BaseModel, EmailStr
+
+# router = APIRouter()
+
+# load_dotenv(override=True)
 #resend.api_key = os.getenv['RESEND_API_KEY']
 
 
