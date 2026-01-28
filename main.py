@@ -9,13 +9,19 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 import resend
 
-from chatbot import chat_oms
+from services.llmsettings import LLMSettings
+from services.service_chatbot import ChatbotService
+from services.service_classifier import ClassifierService
 from models.classifier import ClassifyResult
-from services.classifier_service import classify_oms
+from services.service_rag_faiss import RagFaissService
 
 load_dotenv(override=True)
 
 app = FastAPI()
+llm = LLMSettings()
+rag = RagFaissService(llm)
+chatbot = ChatbotService(llm)
+classifier = ClassifierService(llm)
 
 # CORS
 app.add_middleware(
@@ -41,27 +47,51 @@ class ChatRequest(BaseModel):
 def root():
     return {"status": "Backend running", "endpoints": ["/api/chat", "/api/classify", "/api/waitlist"]}
 
+@app.get("/api/health")
+def health():
+    if rag._index is None:
+        return {"status": "ok", "rag": "not_initialized"}
+    return {"status": "ok", "rag": rag._index.status()}
+
+@app.on_event("startup")
+def startup_event():
+    rag.build_or_load()
+
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     try:
-        classification = classify_oms(
-            message=request.message,
-            history=request.history,
-            setting=request.setting,
-            use_local=request.use_local
-        )
+        merged_setting = dict(request.setting or {})
 
-        user_setting = request.setting or {}
-        def pick_user(value, fallback):
-            return value if value not in (None, "") else fallback
+        rag_context = rag.retrieve(request.message, top_k=3)
+        if rag_context and "_rag_context" not in merged_setting and "rag_context" not in merged_setting:
+            merged_setting["_rag_context"] = rag_context
 
-        merged_setting = {
-            "tone": pick_user(user_setting.get("tone"), classification.get("tone_hint")),
-            "mood": classification.get("mood"),
-            "night_mode": pick_user(user_setting.get("night_mode"), classification.get("night_mode_hint"))
-        }
+        classification = classifier.classify(request.message)
+        classification_payload = dict(classification)
+        if merged_setting.get("emotionalState") or merged_setting.get("mood"):
+            classification_payload.pop("mood", None)
+        if merged_setting.get("tone"):
+            classification_payload.pop("tone_hint", None)
+        if merged_setting.get("mode"):
+            classification_payload.pop("night_mode_hint", None)
 
-        response = chat_oms(
+        for key, value in classification_payload.items():
+            if key not in merged_setting:
+                merged_setting[key] = value
+        if not merged_setting.get("tone") and classification.get("tone_hint"):
+            merged_setting["tone"] = classification["tone_hint"]
+        if not merged_setting.get("emotionalState") and not merged_setting.get("mood"):
+            merged_setting["emotionalState"] = classification.get("mood")
+        if not merged_setting.get("mode") and classification.get("night_mode_hint"):
+            merged_setting["mode"] = "night"
+        if (
+            not merged_setting.get("night_mode")
+            and not merged_setting.get("mode")
+            and classification.get("night_mode_hint")
+        ):
+            merged_setting["night_mode"] = True
+
+        response = chatbot.chat(
             message=request.message,
             history=request.history,
             setting=merged_setting,
@@ -72,8 +102,10 @@ async def chat(request: ChatRequest):
             "response": response,
             "model": "LMStudio" if request.use_local else "OpenAI Responses",
             "classification": classification,
-            "risk": classification.get("risk")
+            "risk": classification.get("risk") if isinstance(classification, dict) else None,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -88,12 +120,7 @@ class ClassifyRequest(BaseModel):
 @app.post("/api/classify", response_model=ClassifyResult)
 async def classify(request: ClassifyRequest):
     try:
-        result = classify_oms(
-            message=request.message,
-            history=request.history,
-            setting=request.setting,
-            use_local=request.use_local
-        )
+        result = classifier.classify(request.message)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -9,3 +9,5 @@ IPython
 resend
 typing
 pytest
+numpy
+faiss-cpu
