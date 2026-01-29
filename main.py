@@ -30,6 +30,8 @@ app.add_middleware(
                    "http://127.0.0.1:5173",
                    "http://localhost:3000",
                    "http://127.0.0.1:3000",
+                   "https://overmyshoulders.online/",  # Tu dominio de Vercel
+                   "https://landing-dp568esrx-george-plabs-projects.vercel.app/"  # Todos los deploys de preview de Vercel
                    ],  # Vite
     allow_credentials=True,
     allow_methods=["*"],
