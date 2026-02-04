@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
+import logging
 import numpy as np
 
 try:
@@ -16,6 +17,7 @@ except Exception as exc:  # pragma: no cover - runtime error path
 
 from services.llmsettings import LLMSettings
 
+logger = logging.getLogger("rag")
 
 _DEFAULT_TOP_K = int(os.getenv("TOP_K", "3"))
 _RAG_DEBUG = os.getenv("RAG_DEBUG", "false").lower() == "true"
@@ -92,6 +94,8 @@ class RagIndex:
     loaded_from_cache: bool
 
     def retrieve(self, client, query: str, top_k: int = None) -> List[Dict[str, Any]]:
+        
+        logger.info("[RAG] retrieve() called")
         if not query:
             return []
         k = top_k if top_k is not None else self.top_k_default
@@ -103,6 +107,7 @@ class RagIndex:
             if idx < 0 or idx >= len(self.chunks):
                 continue
             chunk = self.chunks[idx]
+             
             results.append({
                 "source": chunk["source"],
                 "chunk_id": chunk["chunk_id"],
@@ -112,6 +117,11 @@ class RagIndex:
         if _RAG_DEBUG:
             debug_items = ", ".join([f"{c['source']}:{c['score']:.4f}" for c in results])
             print(f"[RAG_DEBUG] top_k={k} {debug_items}")
+        # if not results:
+        #     logger.info("[RAG] No context retrieved (empty)")
+        # else:
+        #     logger.info(f"[RAG] Retrieved {len(results)} chunks")
+
         return results
 
     def status(self) -> Dict[str, Any]:

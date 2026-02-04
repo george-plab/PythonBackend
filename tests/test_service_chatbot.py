@@ -38,7 +38,7 @@ def test_build_instructions_uses_setting(monkeypatch):
     llm = FakeLLMSettings(openai_client=FakeClient(FakeResponses([FakeResponse("ok")])))
     llm.lmstudio_client = FakeClient(FakeResponses([FakeResponse("ok")]))
     chatbot = sc.ChatbotService(llm)
-    setting = {"tone": "suave", "emotionalState": "triste", "mode": "night"}
+    setting = {"tone": "suave", "state": "triste", "mode": "night"}
     result = chatbot.build_instructions(setting)
     assert "suave" in result
     assert "triste" in result

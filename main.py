@@ -1,12 +1,11 @@
 
-from datetime import datetime,timezone
+from datetime import datetime, timezone
 import os
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any
 import resend
 
 from services.llmsettings import LLMSettings
@@ -14,8 +13,27 @@ from services.service_chatbot import ChatbotService
 from services.service_classifier import ClassifierService
 from models.classifier import ClassifyResult
 from services.service_rag_faiss import RagFaissService
+from services.merge_setting import merge_setting
+
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 load_dotenv(override=True)
+from services.service_auth import (  # noqa: E402
+    DEBUG,
+    GoogleAuthIn,
+    auth_google as auth_google_handler,
+    get_me as get_me_handler,
+    get_current_user,
+    logout as logout_handler,
+    require_auth,
+)
+
+logger = logging.getLogger("main")
 
 app = FastAPI()
 llm = LLMSettings()
@@ -24,15 +42,22 @@ chatbot = ChatbotService(llm)
 classifier = ClassifierService(llm)
 
 # CORS
+cors_origins = os.getenv("CORS_ORIGINS")
+if cors_origins:
+    allowed_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+else:
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://overmyshoulders.online",
+        "https://www.overmyshoulders.online",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173",
-                   "http://127.0.0.1:5173",
-                   "http://localhost:3000",
-                   "http://127.0.0.1:3000",
-                   "https://overmyshoulders.online",  # Tu dominio de Vercel
-                   "https://www.overmyshoulders.online"  # Todos los deploys de preview de Vercel
-                   ],  # Vite
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,6 +69,7 @@ class ChatRequest(BaseModel):
     history: list = Field(default_factory=list)
     setting: dict = Field(default_factory=dict)
     use_local: bool = False  # True = LMStudio, False = GPT
+
 
 @app.get("/")
 def root():
@@ -59,39 +85,21 @@ def health():
 def startup_event():
     rag.build_or_load()
 
+
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     try:
-        merged_setting = dict(request.setting or {})
-
         rag_context = rag.retrieve(request.message, top_k=3)
-        if rag_context and "_rag_context" not in merged_setting and "rag_context" not in merged_setting:
-            merged_setting["_rag_context"] = rag_context
+        logger.info("[RAG] used=%s len=%s", bool(rag_context), len(rag_context) if rag_context else 0)
 
         classification = classifier.classify(request.message)
-        classification_payload = dict(classification)
-        if merged_setting.get("emotionalState") or merged_setting.get("mood"):
-            classification_payload.pop("mood", None)
-        if merged_setting.get("tone"):
-            classification_payload.pop("tone_hint", None)
-        if merged_setting.get("mode"):
-            classification_payload.pop("night_mode_hint", None)
+        classification_payload = classification if isinstance(classification, dict) else dict(classification)
 
-        for key, value in classification_payload.items():
-            if key not in merged_setting:
-                merged_setting[key] = value
-        if not merged_setting.get("tone") and classification.get("tone_hint"):
-            merged_setting["tone"] = classification["tone_hint"]
-        if not merged_setting.get("emotionalState") and not merged_setting.get("mood"):
-            merged_setting["emotionalState"] = classification.get("mood")
-        if not merged_setting.get("mode") and classification.get("night_mode_hint"):
-            merged_setting["mode"] = "night"
-        if (
-            not merged_setting.get("night_mode")
-            and not merged_setting.get("mode")
-            and classification.get("night_mode_hint")
-        ):
-            merged_setting["night_mode"] = True
+        merged_setting = merge_setting(
+            request_setting=request.setting,
+            classification=classification_payload,
+            rag_context=rag_context,
+        )
 
         response = chatbot.chat(
             message=request.message,
@@ -126,6 +134,21 @@ async def classify(request: ClassifyRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auth/google")
+def auth_google(payload: GoogleAuthIn):
+    return auth_google_handler(payload)
+
+
+@app.get("/api/me")
+def get_me(user: dict = Depends(require_auth)):
+    return get_me_handler(user)
+
+
+@app.post("/api/logout")
+def logout(response: Response):
+    return logout_handler(response)
     
 
 class WaitlistIn(BaseModel):
@@ -168,22 +191,23 @@ def waitlist(payload: WaitlistIn):
 
 #Debug
 
-class ChatSetting(BaseModel):
-    mode: Optional[str] = None
-    emotionalState: Optional[str] = None
-    tone: Optional[str] = None
+if DEBUG:
+    class ChatSetting(BaseModel):
+        state: str | None = None
+        emotionalState: str | None = None
+        tone: str | None = None
 
-class ChatIn(BaseModel):
-    message: str
-    history: List[Dict[str, Any]] = []
-    setting: ChatSetting = ChatSetting()
+    class ChatIn(BaseModel):
+        message: str
+        history: list[dict] = []
+        setting: ChatSetting = ChatSetting()
 
-@app.post("/api/chat-debug")
-def chat_debug(payload: ChatIn):
-    # OJO: en prod no loguees contenido sensible
-    return {
-        "ok": True,
-        "received_setting": payload.setting.model_dump(),
-    }
+    @app.post("/api/chat-debug")
+    def chat_debug(payload: ChatIn):
+        # OJO: en prod no loguees contenido sensible
+        return {
+            "ok": True,
+            "received_setting": payload.setting.model_dump(),
+        }
     
 # Para correr el servidor: uvicorn main:app --reload --port 8000

@@ -42,11 +42,14 @@ class ChatbotService:
     # Comportamiento conversacional
     SYSTEM_BASE += (
         " Comportamiento conversacional "
-        "- Empieza reflejando: 'Suena a…', 'Tiene sentido que…' "
+        "- Empieza reflejando: 'De qué te gustaría hablar' , 'qué tal el día',...no presupongas nada"
+        "- Si se clasifica alguna emoción o se detecta akgo contesta empezando: 'Suena a…', 'Tiene sentido que…' "
         "- Luego pregunta una cosa útil. "
-        "- Ofrece 1 micro-sugerencia opcional (respiración breve, escribir 3 líneas, listar opciones). "
+        "- Ofrece 1 micro-sugerencia opcional (respiración breve, escribir 3 líneas, listar opciones). pero no en cada mensaje "
         "- Si el usuario pide consejo directo, ofrece opciones con pros/cons, y respeta su autonomía. "
         "- Mantén mensajes relativamente cortos. Si el usuario está muy activado emocionalmente, reduce longitud aún más."
+        "- No satures a consejos a veces los usuarios no quieren tantos consejos sólo quieren ser escuchados"
+        "- de vez en cuando usa la mayéutica.- haz preguntas al usuario para que el mismo se dé cuenta de lo que le ocurre"
     )
 
     # Formato
@@ -66,9 +69,9 @@ class ChatbotService:
         "- No moralices, no juzgues, no ridiculices."
     )
 
-    # Contenido sexual / “Spicy” (si mode=spicy)
+    # Contenido sexual / “Rogue Light” (si tone=rogue_light)
     SYSTEM_BASE += (
-        " Contenido sexual / “Spicy” (si mode=spicy) "
+        " Contenido sexual / “Rogue Light” (si tone=rogue_light) "
         "Permitido: coqueteo ligero, romanticismo suave, intimidad emocional, afecto verbal."
         "No permitido: contenido sexual explícito, pornográfico, fetichista, coercitivo, humillación, manipulación, dependencia ('solo me necesitas a mí'), exclusividad, ni sexual con menores."
     )
@@ -111,8 +114,9 @@ class ChatbotService:
         """
         setting = {
           "tone": "suave | normal | directo",
-          "mood": "triste | ansioso | solo | neutro",
-          "night_mode": true/false
+          "state": "triste | ansioso | solo | prefer_not_say | otro",
+          "user_mood": "triste | ansioso | solo | neutro",
+          "mode": "default | night"
         }
         """
         parts = [self.SYSTEM_BASE]
@@ -121,15 +125,17 @@ class ChatbotService:
         if tone:
             parts.append(f"Tono de respuesta: {tone}.")
 
-        emotional = setting.get("emotionalState") or setting.get("mood")
-        if emotional:
-            parts.append(f"Estado emocional percibido del usuario: {emotional}.")
+        state = setting.get("state")
+        if state and state != "prefer_not_say":
+            parts.append(f"Estado emocional declarado por el usuario: {state}.")
+        elif setting.get("user_mood"):
+            parts.append(f"Estado emocional percibido del usuario: {setting.get('user_mood')}.")
 
         mode = setting.get("mode")
         if mode:
             parts.append(f"Modo de respuesta: {mode}.")
 
-        if setting.get("night_mode") or mode == "night":
+        if mode == "night":
             parts.append("Es de noche. Responde con especial suavidad y brevedad.")
 
         return "\n".join(parts)

@@ -11,3 +11,5 @@ typing
 pytest
 numpy
 faiss-cpu
+google-auth
+itsdangerous
