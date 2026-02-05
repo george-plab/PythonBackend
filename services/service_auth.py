@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 
+
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -25,7 +26,9 @@ class AuthService:
     """Handle session serialization, cookies, and auth helpers."""
 
     def __init__(self) -> None:
-        self._debug = os.getenv("DEBUG", "").lower() == "true"
+        self.DEBUG = os.getenv("DEBUG", "").lower() == "true"
+        self.COOKIE_NAME = "oms_session"
+        self.SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
         self._serializer = self._build_serializer()
 
     def _build_serializer(self) -> URLSafeTimedSerializer:
@@ -35,7 +38,7 @@ class AuthService:
         return URLSafeTimedSerializer(secret, salt="oms-session")
 
     def _cookie_base_params(self) -> dict:
-        if self._debug:
+        if self.DEBUG:
             secure = False
             samesite = "lax"
         else:
@@ -121,24 +124,24 @@ class AuthService:
         return {"ok": True}
 
 
-auth_service = AuthService()
+#auth_service = AuthService()
 
 
-def get_current_user(request: Request) -> dict | None:
-    return auth_service.get_current_user(request)
+# def get_current_user(request: Request) -> dict | None:
+#     return auth_service.get_current_user(request)
 
 
-def require_auth(user: dict | None = Depends(get_current_user)) -> dict:
-    return auth_service.require_auth(user)
+# def require_auth(user: dict | None = Depends(get_current_user)) -> dict:
+#     return auth_service.require_auth(user)
 
 
-def auth_google(payload: GoogleAuthIn) -> Response:
-    return auth_service.auth_google(payload)
+# def auth_google(payload: GoogleAuthIn) -> Response:
+#     return auth_service.auth_google(payload)
 
 
-def get_me(user: dict) -> dict:
-    return auth_service.get_me(user)
+# def get_me(user: dict) -> dict:
+#     return auth_service.get_me(user)
 
 
-def logout(response: Response) -> dict:
-    return auth_service.logout(response)
+# def logout(response: Response) -> dict:
+#     return auth_service.logout(response)

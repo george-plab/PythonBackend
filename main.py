@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 
 from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
 from pydantic import BaseModel, EmailStr, Field
 import resend
 
@@ -23,15 +25,17 @@ logging.basicConfig(
 )
 
 load_dotenv(override=True)
-from services.service_auth import (  # noqa: E402
-    DEBUG,
-    GoogleAuthIn,
-    auth_google as auth_google_handler,
-    get_me as get_me_handler,
-    get_current_user,
-    logout as logout_handler,
-    require_auth,
-)
+from services.service_auth import GoogleAuthIn,  AuthService, DEBUG
+#    (  # noqa: E402
+#     DEBUG,
+#     GoogleAuthIn,
+#     AuthService,
+#     auth_google as auth_google_handler,
+#     get_me as get_me_handler,
+#     get_current_user,
+#     logout as logout_handler,
+#     require_auth,
+# )
 
 logger = logging.getLogger("main")
 
@@ -81,10 +85,17 @@ def health():
         return {"status": "ok", "rag": "not_initialized"}
     return {"status": "ok", "rag": rag._index.status()}
 
-@app.on_event("startup")
-def startup_event():
-    rag.build_or_load()
+#@app.on_event("startup") #Deprecated
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # STARTUP
+    global auth_service
+    auth_service = AuthService()
+    yield
+    # SHUTDOWN (si algún día necesitas cleanup)
+    # auth_service.close()  # opcional
 
+app = FastAPI(lifespan=lifespan)
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
@@ -138,17 +149,17 @@ async def classify(request: ClassifyRequest):
 
 @app.post("/api/auth/google")
 def auth_google(payload: GoogleAuthIn):
-    return auth_google_handler(payload)
+    return auth_service.auth_google(payload)
 
 
 @app.get("/api/me")
-def get_me(user: dict = Depends(require_auth)):
-    return get_me_handler(user)
+def get_me(user: dict = Depends(auth_service.require_auth)):
+    return auth_service.get_me(user)
 
 
 @app.post("/api/logout")
 def logout(response: Response):
-    return logout_handler(response)
+    return auth_service.logout(response)
     
 
 class WaitlistIn(BaseModel):
