@@ -156,17 +156,6 @@ class ChatbotService:
         setting: dict,
         use_local: bool,
     ) -> str:
-        MAX_USER_MESSAGES = 10
-        user_turns = 1  # el message actual
-        if isinstance(history, list):
-            user_turns += sum(1 for h in history if isinstance(h, dict) and h.get("role") == "user")
-
-        if user_turns > MAX_USER_MESSAGES:
-            raise HTTPException(
-        status_code=429,
-        detail="Beta limit reached: max 10 user messages per session."
-        )
-        
         base_setting = setting or {}
         instructions = self.build_instructions(base_setting)
         if base_setting.get("risk") and base_setting.get("risk") != "none":

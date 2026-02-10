@@ -146,6 +146,42 @@ No crea clientes
 
 No accede a .env
 
+6️⃣ AuthService
+
+📍 Sesión y autenticación (cookie-based)
+
+Responsabilidad
+
+Leer la cookie de sesión (`COOKIE_NAME`, default `oms_session`)
+
+Serializar/deserializar sesión con `SESSION_SECRET`
+
+Exponer helpers:
+
+`get_current_user(request)` → `dict | None` (no fuerza auth)
+
+`require_auth(user)` → 401 si no hay usuario
+
+Endpoint relacionado
+
+`GET /api/me` → “me” fuerte (requiere auth, puede responder 401)
+
+7️⃣ UsageService
+
+📍 Límite de mensajes + cookie de invitado
+
+Responsabilidad
+
+Gestionar cookie invitado (`GUEST_COOKIE_NAME`, default `oms_guest`)
+
+Contar turnos de usuario en `history`
+
+Enforzar límites (paywall 402) para:
+
+Anónimo → `ANON_MESSAGE_LIMIT` (default 10)
+
+Autenticado → `AUTH_MESSAGE_LIMIT` (default 100)
+
 5️⃣ main.py
 
 📍 Orquestador limpio
@@ -155,6 +191,8 @@ Responsabilidad
 Instanciar servicios una sola vez
 
 Coordinar el flujo de /api/chat
+
+Exponer endpoints “policy” sin forzar auth
 
 Flujo típico
 
@@ -182,6 +220,14 @@ Devuelve:
   "classification": {...},
   "risk": "none"
 }
+
+Endpoints relacionados (auth + límites)
+
+`GET /api/me/policy` → siempre 200, devuelve:
+
+`isAuthenticated` + `maxMessages` + `limits{anon/auth}` (+ `user` opcional si logged)
+
+`GET /api/me` → requiere auth (401 si no logged)
 
 Ventajas
 
