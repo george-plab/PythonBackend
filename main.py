@@ -48,7 +48,7 @@ auth_limit = int(os.getenv("AUTH_MESSAGE_LIMIT", "100"))
 auth_service = AuthService(
         debug=debug,
         cookie_name=os.getenv("COOKIE_NAME","oms_session"),
-        session_max_age_seconds=int( os.getenv( "SESSIOM_MAX_AGE_SECONDS","86400" ) ),
+        session_max_age_seconds=int( os.getenv( "SESSION_MAX_AGE_SECONDS","86400" ) ),
         )
 usage_service = UsageService(
         debug=debug,

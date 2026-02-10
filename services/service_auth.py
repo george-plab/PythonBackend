@@ -34,9 +34,9 @@ class AuthService:
         self._serializer = self._build_serializer()
 
     def _build_serializer(self) -> URLSafeTimedSerializer:
-        secret = os.getenv("SESSION_SECRET")
+        secret = os.getenv("GOOGLE_CLIENT_SECRET")
         if not secret:
-            raise HTTPException(status_code=500, detail="SESSION_SECRET missing")
+            raise HTTPException(status_code=500, detail="GOOGLE_CLIENT_SECRET missing")
         return URLSafeTimedSerializer(secret, salt="oms-session")
 
     def _cookie_base_params(self) -> dict:
